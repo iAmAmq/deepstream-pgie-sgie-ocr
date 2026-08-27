@@ -1,0 +1,58 @@
+# Secondary recognition: PaddleOCR text recognition on License_Plate crops.
+#
+# NOT ACTIVE YET -- the model is not in model_wts/. To enable:
+#   1. Put the PaddleOCR recognition ONNX and its character dictionary in
+#      ../model_wts/ and correct the paths below.
+#   2. Set the input dimensions to match the model (PP-OCRv4 rec is usually
+#      3x48x320; older v3 models use 3x32x320).
+#   3. Set enable=1 in the [secondary-gie0] group of ds_ts_ocr_config.txt.
+#
+# The gating -- run only on License_Plate and nothing else -- is the three
+# operate-on / process-mode keys below. nvinfer crops those objects and infers
+# on them alone; every other class is ignored without any application code.
+
+[property]
+gpu-id=0
+
+# PaddleOCR rec normalises to (x/255 - 0.5) / 0.5, i.e. scale 1/127.5 with a
+# 127.5 offset per channel.
+net-scale-factor=0.0078431372549
+offsets=127.5;127.5;127.5
+# 1 = BGR, per img_mode in the model's inference.yml.
+model-color-format=1
+# Text recognition is sensitive to aspect distortion; PaddleOCR resizes to a
+# fixed height and pads the width, so keep the aspect ratio.
+maintain-aspect-ratio=1
+symmetric-padding=0
+
+onnx-file=../model_wts/inference.onnx
+model-engine-file=../model_wts/inference.onnx_b16_gpu0_fp16.engine
+# infer-dims=c;h;w -- must match the recognition model.
+infer-dims=3;48;320
+
+batch-size=16
+network-mode=2
+gie-unique-id=2
+
+# --- the license-plate gate -------------------------------------------------
+# 2 = operate on objects cropped from the frame, not the whole frame.
+process-mode=2
+# Only consume detections produced by the primary detector (gie-unique-id=1).
+operate-on-gie-id=1
+# Only class 5 = License_Plate. Every other class is skipped entirely.
+operate-on-class-ids=5
+# Skip plates too small to read; saves pointless recognition passes.
+input-object-min-width=32
+input-object-min-height=16
+# Gulf plates are two-row (Arabic above, Latin below). The application trims
+# the crop to its lower portion before this stage -- see ocr-plate-row-fraction
+# in the [secondary-gie0] group of the app config.
+# ----------------------------------------------------------------------------
+
+# 100 = "other". A CTC recognition head emits [seq_len, num_chars], which
+# nvinfer cannot turn into a label on its own, so the raw tensor is attached as
+# metadata and decoded in the application.
+network-type=100
+output-tensor-meta=1
+# Name of the recognition output tensor; check with trtexec if unsure.
+output-blob-names=fetch_name_0

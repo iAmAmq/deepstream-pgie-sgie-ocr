@@ -1,0 +1,86 @@
+# ds_ts_ocr -- truck component detection with license-plate OCR.
+#
+# deepstream-app style configuration. Paths are resolved relative to this file.
+
+[application]
+# Print per-class counts each interval; 0 disables.
+perf-measurement-interval-sec=5
+
+[source0]
+enable=1
+# 1=CameraV4L2  2=URI(file/rtsp)  3=MultiURI
+type=2
+uri=file:///opt/nvidia/deepstream/deepstream-8.0/sources/deepstream_python_apps/apps/ds_ts_ocr/lp1.mp4
+num-sources=1
+gpu-id=0
+# Loop file sources forever; ignored for live sources.
+file-loop=0
+cudadec-memtype=0
+
+[streammux]
+gpu-id=0
+# 1 for RTSP / live cameras, 0 for files.
+live-source=0
+batch-size=1
+batched-push-timeout=40000
+width=1920
+height=1080
+nvbuf-memory-type=0
+
+[primary-gie]
+enable=1
+gpu-id=0
+config-file=config_infer_primary_truck.txt
+
+[tracker]
+# A tracker is optional but recommended once OCR is on: it gives each plate a
+# stable id, so a plate can be recognised once instead of every frame.
+enable=0
+tracker-width=640
+tracker-height=384
+gpu-id=0
+ll-lib-file=/opt/nvidia/deepstream/deepstream-8.0/lib/libnvds_nvmultiobjecttracker.so
+ll-config-file=/opt/nvidia/deepstream/deepstream-8.0/samples/configs/deepstream-app/config_tracker_NvDCF_perf.yml
+
+[secondary-gie0]
+# PP-OCRv6_small_rec: Latin letters + Western digits (no Arabic script).
+enable=1
+gpu-id=0
+config-file=config_infer_secondary_ocr.txt
+# Character dictionary used to decode the CTC output. One character per line.
+ocr-dict-file=../model_wts/ocr_dict.txt
+# Drop recognitions below this mean per-character confidence.
+ocr-min-confidence=0.5
+# Fraction of the plate box height to keep, measured from the bottom, so the
+# recogniser sees the Latin row rather than both rows squeezed into its 48px
+# input. Measured on lp1.mp4: 0.70 gave 25% exact reads against 9% untrimmed.
+# 0 disables the trim.
+ocr-plate-row-fraction=0.70
+
+[osd]
+enable=1
+gpu-id=0
+border-width=2
+text-size=13
+text-color=1;1;1;1
+text-bg-color=0.3;0.3;0.3;1
+font=Serif
+display-bbox=1
+display-text=1
+process-mode=0
+
+[sink0]
+enable=1
+# 1=FakeSink  2=EglSink  3=File
+type=3
+sync=0
+# Only used by type=3.
+output-file=out.mp4
+# 1=mp4 2=mkv
+container=1
+# 1=H264 2=H265
+codec=1
+bitrate=4000000
+# Encoder: 0=auto (hardware NVENC when /dev/v4l2-nvenc exists, else software)
+#          1=force hardware  2=force software (x264enc)
+enc-type=0
